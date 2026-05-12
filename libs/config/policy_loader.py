@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import yaml
 from pathlib import Path
@@ -14,16 +15,24 @@ class PolicyLoader:
         if not path.exists():
             raise FileNotFoundError(f"Policy file not found: {path}")
 
-        # 🔥 CHECK FILE CHANGE TIME
         mtime = path.stat().st_mtime
 
-        # 🔥 RELOAD IF FILE CHANGED
         if self._cache is None or mtime != self._last_mtime:
-            with open(path, "r") as f:
-                try:
-                    self._cache = yaml.safe_load(f)
-                except yaml.YAMLError as e:
-                    raise ValueError(f"Invalid YAML format: {e}")
-            self._last_mtime = mtime
+            try:
+                with open(path, "r") as f:
+                    data = yaml.safe_load(f)
+
+                if data is None:
+                    raise ValueError("Empty YAML file")
+
+                # basic validation
+                if "zones" not in data or "global" not in data:
+                    raise ValueError("Invalid policy structure")
+
+                self._cache = data
+                self._last_mtime = mtime
+
+            except yaml.YAMLError as e:
+                raise ValueError(f"Invalid YAML format: {e}")
 
         return self._cache
