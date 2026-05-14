@@ -193,7 +193,7 @@ def main() -> None:
         builder.build_graph()
         graph_text = builder.serialize_graph()
 
-        if graph_text:
+        if frame_id % 30 == 0 and graph_text:
             prompt = build_reasoning_prompt(graph_text)
             print("\nLLM PROMPT:\n")
             print(prompt)

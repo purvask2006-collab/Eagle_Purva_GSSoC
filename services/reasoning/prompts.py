@@ -1,4 +1,4 @@
-def build_reasoning_prompt(graph_text):
+def build_reasoning_prompt(graph_text: str) -> str:
 
     prompt = f"""
 You are an AI surveillance reasoning system.

@@ -6,7 +6,12 @@ import networkx as nx
 
 from services.detection.zones import DEFAULT_ZONES
 
-
+INTERACTION_OBJECTS = [
+    "backpack",
+    "handbag",
+    "cell phone",
+    "laptop"
+]
 class SceneGraphBuilder:
     def serialize_graph(self):
 
@@ -105,13 +110,8 @@ class SceneGraphBuilder:
 
                 if (
                     det1.label == "person"
-                    and det2.label in [
-                        "backpack",
-                        "handbag",
-                        "cell phone",
-                        "laptop"
-                    ]
-                    and dist < 80
+                    and det2.label in INTERACTION_OBJECTS
+                    and 60 <= dist < 80
                 ):
 
                     self.graph.add_edge(
@@ -124,12 +124,7 @@ class SceneGraphBuilder:
 
                 if (
                     det1.label == "person"
-                    and det2.label in [
-                        "backpack",
-                        "handbag",
-                        "cell phone",
-                        "laptop"
-                    ]
+                    and det2.label in INTERACTION_OBJECTS
                     and dist < 60
                 ):
 
