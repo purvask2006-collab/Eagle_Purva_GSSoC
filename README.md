@@ -214,8 +214,8 @@ Eagle/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-org/eagle.git
-cd eagle
+git clone https://github.com/Anushwathi807/Eagle-Real-Time-Semantic-Surveillance-using-Detection-Tracking-Reasoning.git
+cd Eagle-Real-Time-Semantic-Surveillance-using-Detection-Tracking-Reasoning
 ```
 
 ### 2. Configure environment variables
@@ -377,6 +377,6 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 **Built with ❤️ for GSSoC 2026**
 
-[⭐ Star this repo](https://github.com/your-org/agentic-vision) · [🐛 Report a Bug](https://github.com/your-org/agentic-vision/issues) · [💡 Request a Feature](https://github.com/your-org/eagle/issues)
+[⭐ Star this repo](https://github.com/Anushwathi807/Eagle-Real-Time-Semantic-Surveillance-using-Detection-Tracking-Reasoning) · [🐛 Report a Bug](https://github.com/Anushwathi807/Eagle-Real-Time-Semantic-Surveillance-using-Detection-Tracking-Reasoning/issues) · [💡 Request a Feature](https://github.com/Anushwathi807/Eagle-Real-Time-Semantic-Surveillance-using-Detection-Tracking-Reasoning/issues)
 
 </div>
