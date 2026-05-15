@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 import sys
@@ -8,7 +9,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.inspect_tracks import inspect_tracks, render_text
+from scripts.inspect_tracks import (
+    _positive_int,
+    build_json_payload,
+    inspect_tracks,
+    render_text,
+)
 
 
 @pytest.fixture()
@@ -109,19 +115,62 @@ def test_inspect_tracks_limits_recent_events(fake_redis):
     assert summaries[0].action_summary == "active"
 
 
+def test_inspect_tracks_skips_malformed_events(fake_redis):
+    _seed_track(fake_redis)
+    _seed_events(fake_redis)
+    fake_redis.set(
+        "event:cam_01:3",
+        json.dumps(
+            [
+                {
+                    "event": "BROKEN",
+                    "track_id": "not-an-int",
+                    "frame_id": 3,
+                    "timestamp_ms": 3000.0,
+                    "zones_present": ["safe_corridor"],
+                },
+                {
+                    "event": "STILL_ACTIVE",
+                    "track_id": 3,
+                    "frame_id": "4",
+                    "timestamp_ms": 4000.0,
+                    "zones_present": ["safe_corridor"],
+                },
+            ]
+        ),
+    )
+
+    summaries = inspect_tracks(fake_redis, camera_id="cam_01", track_id=3)
+
+    assert summaries[0].event_count == 3
+    assert summaries[0].events[-1]["event"] == "STILL_ACTIVE"
+    assert summaries[0].events[-1]["frame_id"] == 4
+
+
+def test_positive_int_rejects_zero_and_negative_values():
+    assert _positive_int("2") == 2
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        _positive_int("0")
+    with pytest.raises(argparse.ArgumentTypeError):
+        _positive_int("-1")
+
+
 def test_json_payload_is_machine_readable(fake_redis):
     _seed_track(fake_redis)
     _seed_events(fake_redis)
     summaries = inspect_tracks(fake_redis, camera_id="cam_01", track_id=3)
 
-    payload = {
-        "camera_id": "cam_01",
-        "redis_url": "redis://localhost:6379",
-        "tracks": [summary.to_dict() for summary in summaries],
-    }
+    payload = build_json_payload(
+        summaries,
+        camera_id="cam_01",
+        redis_url="redis://user:secret@localhost:6379/0",
+    )
 
     encoded = json.dumps(payload)
     decoded = json.loads(encoded)
+    assert decoded["redis_url"] == "redis://localhost:6379"
+    assert "secret" not in encoded
     assert decoded["tracks"][0]["track_id"] == 3
     assert decoded["tracks"][0]["events"][0]["event"] == "BORN"
 
@@ -139,6 +188,23 @@ def test_text_render_includes_detail_rows_for_single_track(fake_redis):
     )
 
     assert "Track #3" in output
+    assert "Redis @ localhost:6379" in output
     assert "summary: born -> active" in output
     assert "event rows:" in output
     assert "frame 2: ACTIVE" in output
+
+
+def test_text_render_redacts_redis_credentials(fake_redis):
+    _seed_track(fake_redis)
+    summaries = inspect_tracks(fake_redis, camera_id="cam_01", track_id=3)
+
+    output = render_text(
+        summaries,
+        camera_id="cam_01",
+        redis_url="redis://user:secret@redis.example.com:6380/0",
+        show_event_rows=False,
+    )
+
+    assert "redis.example.com:6380" in output
+    assert "user" not in output
+    assert "secret" not in output

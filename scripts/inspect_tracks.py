@@ -15,6 +15,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from typing import Any, Iterable
+from urllib.parse import urlsplit, urlunsplit
 
 import redis
 
@@ -67,14 +68,17 @@ def _track_id_from_key(key: str) -> int:
     return int(key.rsplit(":", 1)[-1])
 
 
-def _normalise_event(event: dict[str, Any]) -> dict[str, Any]:
+def _normalise_event(event: dict[str, Any]) -> dict[str, Any] | None:
     normalised = dict(event)
     if "event" in normalised:
         normalised["event"] = str(normalised["event"])
-    if "track_id" in normalised:
-        normalised["track_id"] = int(normalised["track_id"])
-    if "frame_id" in normalised:
-        normalised["frame_id"] = int(normalised["frame_id"])
+    try:
+        if "track_id" in normalised:
+            normalised["track_id"] = int(normalised["track_id"])
+        if "frame_id" in normalised:
+            normalised["frame_id"] = int(normalised["frame_id"])
+    except (TypeError, ValueError):
+        return None
     return normalised
 
 
@@ -113,6 +117,8 @@ def load_events(
             if not isinstance(event, dict):
                 continue
             normalised = _normalise_event(event)
+            if normalised is None:
+                continue
             if track_id is not None and normalised.get("track_id") != track_id:
                 continue
             events.append(normalised)
@@ -169,13 +175,46 @@ def inspect_tracks(
     ]
 
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--last must be a positive integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("--last must be greater than 0")
+    return parsed
+
+
+def _safe_redis_display_url(redis_url: str) -> str:
+    parsed = urlsplit(redis_url)
+    if not parsed.scheme or not parsed.hostname:
+        return redis_url
+
+    host = parsed.hostname
+    if parsed.port is not None:
+        host = f"{host}:{parsed.port}"
+    return urlunsplit((parsed.scheme, host, "", "", ""))
+
+
+def build_json_payload(
+    summaries: list[TrackSummary],
+    camera_id: str,
+    redis_url: str,
+) -> dict[str, Any]:
+    return {
+        "camera_id": camera_id,
+        "redis_url": _safe_redis_display_url(redis_url),
+        "tracks": [summary.to_dict(include_events=True) for summary in summaries],
+    }
+
+
 def render_text(
     summaries: list[TrackSummary],
     camera_id: str,
     redis_url: str,
     show_event_rows: bool,
 ) -> str:
-    host = redis_url.replace("redis://", "")
+    host = _safe_redis_display_url(redis_url).replace("redis://", "")
     lines = [f"Active tracks in {camera_id} (Redis @ {host})", ""]
 
     if not summaries:
@@ -225,7 +264,7 @@ def parse_args() -> argparse.Namespace:
         help="Camera id to inspect. Defaults to cam_01.",
     )
     parser.add_argument("--track", type=int, help="Only inspect one track id.")
-    parser.add_argument("--last", type=int, help="Limit event rows to the last N events.")
+    parser.add_argument("--last", type=_positive_int, help="Limit event rows to the last N events.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser.parse_args()
 
@@ -241,12 +280,7 @@ def main() -> None:
     )
 
     if args.json:
-        payload = {
-            "camera_id": args.camera,
-            "redis_url": args.redis_url,
-            "tracks": [summary.to_dict(include_events=True) for summary in summaries],
-        }
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(build_json_payload(summaries, args.camera, args.redis_url), indent=2))
         return
 
     print(
