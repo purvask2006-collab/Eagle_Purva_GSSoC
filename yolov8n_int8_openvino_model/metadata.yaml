@@ -92,7 +92,7 @@ names:
   78: hair drier
   79: toothbrush
 args:
-  data: C:\Users\Admin\Eagle-Real-Time-Semantic-Surveillance-using-Detection-Tracking-Reasoning\Drone-detection-1\data.yaml
+  data: Drone-detection-1/data.yaml
   batch: 1
   fraction: 1.0
   half: false
