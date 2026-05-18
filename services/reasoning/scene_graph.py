@@ -1,6 +1,6 @@
-"""
+﻿"""
 Scene Graph Manager for surveillance reasoning.
-Builds a dynamic NetworkX DiGraph from a TrackedFrame
+Builds a dynamic NetworkX MultiDiGraph from a TrackedFrame
 and serializes it into an LLM-ready prompt snippet.
 """
 from __future__ import annotations
@@ -36,33 +36,49 @@ class SceneGraph:
     def from_tracked_frame(cls, frame) -> "SceneGraph":
         sg = cls(timestamp=getattr(frame, "timestamp", 0.0))
 
+        # Add zones (skip if missing id)
         for zone in getattr(frame, "zones", []):
-            sg.add_node(GraphNode(id=zone["id"], node_type=NodeType.ZONE))
+            zone_id = zone.get("id")
+            if zone_id:
+                sg.add_node(GraphNode(id=zone_id, node_type=NodeType.ZONE))
 
+        # Add objects and their belongs_to relationships
         for obj in getattr(frame, "objects", []):
-            sg.add_node(GraphNode(id=obj["id"], node_type=NodeType.OBJECT))
-            if obj.get("belongs_to"):
-                sg.add_node(GraphNode(id=obj["belongs_to"], node_type=NodeType.ZONE))
+            obj_id = obj.get("id")
+            if not obj_id:
+                continue
+            sg.add_node(GraphNode(id=obj_id, node_type=NodeType.OBJECT))
+            belongs_to = obj.get("belongs_to")
+            if belongs_to:
+                sg.add_node(GraphNode(id=belongs_to, node_type=NodeType.ZONE))
                 sg.add_edge(GraphEdge(
-                    source=obj["id"],
-                    target=obj["belongs_to"],
+                    source=obj_id,
+                    target=belongs_to,
                     edge_type=EdgeType.INSIDE,
                 ))
 
+        # Add persons and their relationships
         for person in getattr(frame, "persons", []):
-            pid = person["id"]
+            pid = person.get("id")
+            if not pid:
+                continue
             sg.add_node(GraphNode(id=pid, node_type=NodeType.PERSON))
 
-            if person.get("zone"):
-                sg.add_node(GraphNode(id=person["zone"], node_type=NodeType.ZONE))
+            # INSIDE relationship
+            zone = person.get("zone")
+            if zone:
+                sg.add_node(GraphNode(id=zone, node_type=NodeType.ZONE))
                 sg.add_edge(GraphEdge(
                     source=pid,
-                    target=person["zone"],
+                    target=zone,
                     edge_type=EdgeType.INSIDE,
                 ))
 
+            # NEAR relationships
             for nearby in person.get("nearby_objects", []):
-                obj_id = nearby["id"]
+                obj_id = nearby.get("id")
+                if not obj_id:
+                    continue
                 dist = nearby.get("distance_px")
                 sg.add_node(GraphNode(id=obj_id, node_type=NodeType.OBJECT))
                 sg.add_edge(GraphEdge(
@@ -72,7 +88,10 @@ class SceneGraph:
                     distance_px=dist,
                 ))
 
+            # INTERACTING_WITH relationships
             for obj_id in person.get("interacting_with", []):
+                if not obj_id:
+                    continue
                 sg.add_node(GraphNode(id=obj_id, node_type=NodeType.OBJECT))
                 sg.add_edge(GraphEdge(
                     source=pid,
@@ -95,6 +114,7 @@ class SceneGraph:
             lines.append(f"{src} \u2192 {edge_label} \u2192 {dst}")
 
         serialized = "\n".join(lines)
+        # Rough trim if over 200 words (≈260 tokens, safe under 300)
         words = serialized.split()
         if len(words) > 200:
             serialized = " ".join(words[:200]) + "\n[...truncated]"
